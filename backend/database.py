@@ -3,7 +3,7 @@ import logging
 from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy.exc import OperationalError, SQLAlchemyError
+from sqlalchemy.exc import OperationalError, ProgrammingError, SQLAlchemyError
 from dotenv import load_dotenv
 
 # Configure logging for database module
@@ -26,9 +26,11 @@ if not raw_db_url:
 
 def prepare_database_url(url: str) -> str:
     """
-    Normalizes the database connection URL for SQLAlchemy + psycopg2 + Supabase / Render:
+    Normalizes and sanitizes the database connection URL for SQLAlchemy + psycopg2 / psycopg + Supabase / Render:
     1. Replaces legacy 'postgres://' scheme with 'postgresql://'.
-    2. Ensures 'sslmode=require' query parameter is present for cloud PostgreSQL providers.
+    2. Strips unsupported non-libpq query parameters (e.g. 'pgbouncer', 'supavisor', 'schema', 'connection_limit')
+       which trigger 'psycopg2.ProgrammingError: invalid dsn: invalid connection option "pgbouncer"'.
+    3. Ensures 'sslmode=require' query parameter is present for cloud PostgreSQL providers.
     """
     url = url.strip()
 
@@ -36,23 +38,33 @@ def prepare_database_url(url: str) -> str:
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
 
-    # 2. Ensure sslmode=require parameter is included
+    # 2. Parse URL and sanitize query parameters
     parsed = urlparse(url)
     query_params = parse_qs(parsed.query)
 
+    # Remove non-libpq / unsupported parameters that break psycopg2 DSN parsing
+    unsupported_params = {"pgbouncer", "supavisor", "schema", "connection_limit", "pool_timeout"}
+    for param in unsupported_params:
+        if param in query_params:
+            logger.info(f"[DB CONFIG] Removing unsupported DSN option '{param}' from DATABASE_URL for psycopg compatibility.")
+            query_params.pop(param, None)
+
+    # 3. Ensure sslmode=require parameter is included
     if "sslmode" not in query_params:
         query_params["sslmode"] = ["require"]
-        new_query = urlencode(query_params, doseq=True)
-        url = urlunparse((
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            parsed.params,
-            new_query,
-            parsed.fragment
-        ))
 
-    return url
+    # Reconstruct clean database URL
+    new_query = urlencode(query_params, doseq=True)
+    clean_url = urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        parsed.params,
+        new_query,
+        parsed.fragment
+    ))
+
+    return clean_url
 
 
 SQLALCHEMY_DATABASE_URL = prepare_database_url(raw_db_url)
@@ -71,9 +83,9 @@ def mask_db_url(url: str) -> str:
 
 
 # Log masked database URL on initialization
-logger.info(f"[DB CONFIG] Database target: {mask_db_url(SQLALCHEMY_DATABASE_URL)}")
+logger.info(f"[DB CONFIG] Sanitized database target: {mask_db_url(SQLALCHEMY_DATABASE_URL)}")
 
-# Explicit connect_args for psycopg2 SSL & timeout compatibility
+# Explicit connect_args for psycopg2 / psycopg SSL & timeout compatibility
 connect_args = {
     "connect_timeout": 10,
     "sslmode": "require"
@@ -107,14 +119,15 @@ def test_db_connection() -> tuple[bool, str]:
         msg = "Successfully connected to Supabase / Render PostgreSQL database."
         logger.info(f"[DB CONNECT SUCCESS] {msg}")
         return True, msg
-    except OperationalError as oe:
+    except (OperationalError, ProgrammingError) as oe:
         err_str = str(oe)
         diagnostic_hint = ""
-        if "Network is unreachable" in err_str or "could not translate host name" in err_str:
+        if "invalid connection option" in err_str or "pgbouncer" in err_str:
+            diagnostic_hint = " HINT: Unsupported DSN parameters were detected. Remove 'pgbouncer=true' from DATABASE_URL query string."
+        elif "Network is unreachable" in err_str or "could not translate host name" in err_str:
             diagnostic_hint = (
-                " HINT: Render web services use IPv4 outbound networks. Direct Supabase domain (db.*.supabase.co) "
-                "may resolve to IPv6 only. If deployed on Render, use the Supabase Connection Pooler URL "
-                "(e.g., postgresql://postgres.[REF]:[PASS]@aws-0-[REGION].pooler.supabase.com:6543/postgres?sslmode=require)."
+                " HINT: Render web services use IPv4 outbound networks. If direct domain (db.*.supabase.co) fails, "
+                "use the Supabase Connection Pooler URL (e.g., postgresql://postgres.[REF]:[PASS]@aws-0-[REGION].pooler.supabase.com:6543/postgres?sslmode=require)."
             )
         elif "SSL" in err_str or "sslmode" in err_str:
             diagnostic_hint = " HINT: Cloud database requires SSL. Ensure 'sslmode=require' is specified."
