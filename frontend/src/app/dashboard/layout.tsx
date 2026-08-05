@@ -29,11 +29,13 @@ export default function DashboardLayout({
 
   const navItems = [
     { name: "Upload Reports", href: "/dashboard/upload", icon: FileText },
+    { name: "AI Summary", href: "/dashboard/summary", icon: BrainCircuit },
     { name: "Patient Timeline", href: "/dashboard/timeline", icon: Clock },
     { name: "Medical Safety", href: "/dashboard/safety", icon: ShieldCheck },
     { name: "Lab Trends", href: "/dashboard/trends", icon: Activity },
     { name: "AI Assistant", href: "/dashboard/assistant", icon: BrainCircuit },
   ];
+
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden relative">

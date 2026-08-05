@@ -24,6 +24,7 @@ from services.timeline_service import generate_timeline
 from services.safety_service import analyze_safety
 from services.lab_trend_service import analyze_lab_trends
 from services.chat_service import generate_chat_response
+from services.summary_service import generate_patient_summary
 
 router = APIRouter()
 
@@ -210,6 +211,55 @@ def get_medical_record(id: int, db: Session = Depends(get_db)):
     return record.to_dict()
 
 
+class UpdateMedicalRecordRequest(BaseModel):
+    patient: Optional[dict] = None
+    visit: Optional[dict] = None
+    medications: Optional[list] = None
+    laboratory_results: Optional[list] = None
+    medical_information: Optional[dict] = None
+    confidence_score: Optional[int] = None
+
+
+@router.put("/medical-records/{id}")
+def update_medical_record(id: int, payload: UpdateMedicalRecordRequest, db: Session = Depends(get_db)):
+    record = db.query(models.MedicalRecord).filter(models.MedicalRecord.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Medical record not found")
+
+    if payload.patient is not None:
+        record.patient = payload.patient
+    if payload.visit is not None:
+        record.visit = payload.visit
+    if payload.medications is not None:
+        record.medications = payload.medications
+    if payload.laboratory_results is not None:
+        record.laboratory_results = payload.laboratory_results
+    if payload.medical_information is not None:
+        record.medical_information = payload.medical_information
+    if payload.confidence_score is not None:
+        record.confidence_score = payload.confidence_score
+
+    db.commit()
+    db.refresh(record)
+    return {"message": "Medical record updated successfully", "record": record.to_dict()}
+
+
+@router.delete("/medical-records/{id}")
+def delete_medical_record(id: int, db: Session = Depends(get_db)):
+    record = db.query(models.MedicalRecord).filter(models.MedicalRecord.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Medical record not found")
+    
+    doc_id = record.document_id
+    db.delete(record)
+    if doc_id:
+        doc = db.query(models.UploadedDocument).filter(models.UploadedDocument.id == doc_id).first()
+        if doc:
+            db.delete(doc)
+    db.commit()
+    return {"message": f"Medical record {id} deleted successfully"}
+
+
 @router.delete("/records")
 def clear_all_records(db: Session = Depends(get_db)):
     """Reset the workspace — useful between demo runs."""
@@ -222,6 +272,16 @@ def clear_all_records(db: Session = Depends(get_db)):
 # --------------------------------------------------------------------------
 # Analysis features
 # --------------------------------------------------------------------------
+@router.get("/ai/summary")
+def get_all_ai_summary(db: Session = Depends(get_db)):
+    return generate_patient_summary(_records_for(db))
+
+
+@router.get("/ai/summary/{patient_name}")
+def get_patient_ai_summary(patient_name: str, db: Session = Depends(get_db)):
+    return generate_patient_summary(_records_for(db, patient_name))
+
+
 @router.get("/timeline")
 def get_all_timelines(db: Session = Depends(get_db)):
     return generate_timeline(_records_for(db))

@@ -14,12 +14,15 @@ import {
   ShieldAlert,
   Loader2,
   BrainCircuit,
+  Trash2,
+  RefreshCw,
 } from "lucide-react";
 import {
   fetchSafety,
   fetchTimeline,
   fetchLabTrends,
   resolveActivePatient,
+  clearAllRecords,
 } from "@/lib/api";
 import { MedicalDisclaimer } from "@/components/Brand";
 
@@ -38,32 +41,52 @@ const SEVERITY_STYLE: Record<string, string> = {
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [patient, setPatient] = useState<string | undefined>();
   const [timeline, setTimeline] = useState<any[]>([]);
   const [safety, setSafety] = useState<any>(null);
   const [trends, setTrends] = useState<any[]>([]);
 
+  const loadDashboardData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const active = await resolveActivePatient();
+      setPatient(active);
+      const [tl, sa, tr] = await Promise.all([
+        fetchTimeline(active),
+        fetchSafety(active),
+        fetchLabTrends(active),
+      ]);
+      setTimeline(tl || []);
+      setSafety(sa);
+      setTrends(tr || []);
+    } catch (e: any) {
+      setError(e?.message || "Could not reach the MediGuardian backend.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const active = await resolveActivePatient();
-        setPatient(active);
-        const [tl, sa, tr] = await Promise.all([
-          fetchTimeline(active),
-          fetchSafety(active),
-          fetchLabTrends(active),
-        ]);
-        setTimeline(tl || []);
-        setSafety(sa);
-        setTrends(tr || []);
-      } catch (e: any) {
-        setError(e?.message || "Could not reach the MediGuardian backend.");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    loadDashboardData();
   }, []);
+
+  const handleClearRecords = async () => {
+    if (!confirm("Are you sure you want to clear all uploaded documents and medical records?")) {
+      return;
+    }
+    setClearing(true);
+    try {
+      await clearAllRecords();
+      await loadDashboardData();
+    } catch (err: any) {
+      alert(`Failed to clear records: ${err.message}`);
+    } finally {
+      setClearing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -76,15 +99,18 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-lg rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center">
+      <div className="mx-auto max-w-lg rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center shadow-sm">
         <ShieldAlert className="mx-auto mb-3 h-8 w-8 text-rose-500" />
         <h2 className="text-lg font-bold text-slate-800">Backend unavailable</h2>
         <p className="mt-1 text-sm text-slate-600">{error}</p>
-        <p className="mt-3 text-xs text-slate-500">
-          Start it with{" "}
-          <code className="rounded bg-white px-1.5 py-0.5 font-mono">uvicorn main:app --reload</code>{" "}
-          inside the <code className="font-mono">backend</code> folder.
-        </p>
+        <div className="mt-4 flex justify-center gap-3">
+          <button
+            onClick={loadDashboardData}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-slate-900"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -99,7 +125,7 @@ export default function DashboardPage() {
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
           <UploadCloud className="h-7 w-7" />
         </div>
-        <h2 className="text-xl font-bold text-slate-800">No records yet</h2>
+        <h2 className="text-xl font-bold text-slate-800">No medical records yet</h2>
         <p className="mt-2 text-sm text-slate-500">
           Upload prescriptions, lab reports or discharge summaries and MediGuardian
           will build a connected timeline, cross-check them for conflicts, and track
@@ -138,7 +164,7 @@ export default function DashboardPage() {
     {
       label: "Lab tests tracked",
       value: trends.length,
-      hint: `${trends.filter((t) => t.out_of_range).length} outside normal range`,
+      hint: `${trends.filter((t) => t.latest_result?.is_abnormal).length} outside normal range`,
       icon: Activity,
       tone: "text-accent-500 bg-accent-300/20",
     },
@@ -156,13 +182,23 @@ export default function DashboardPage() {
             Everything MediGuardian found across your uploaded documents.
           </p>
         </div>
-        <Link
-          href="/dashboard/upload"
-          className="flex w-fit items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-md shadow-brand-500/25 transition-all hover:bg-brand-700"
-        >
-          <UploadCloud className="h-4 w-4" />
-          Upload new document
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleClearRecords}
+            disabled={clearing}
+            className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-100 disabled:opacity-50"
+          >
+            {clearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            Reset Workspace
+          </button>
+          <Link
+            href="/dashboard/upload"
+            className="flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-md shadow-brand-500/25 transition-all hover:bg-brand-700"
+          >
+            <UploadCloud className="h-4 w-4" />
+            Upload document
+          </Link>
+        </div>
       </div>
 
       {/* Risk banner */}
@@ -314,6 +350,23 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* AI Summary nudge */}
+      <Link
+        href="/dashboard/summary"
+        className="flex items-center gap-4 rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-600 to-brand-700 text-white p-5 transition-shadow hover:shadow-lg"
+      >
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/10 backdrop-blur-md text-white">
+          <BrainCircuit className="h-6 w-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-white text-base">View AI Executive Summary</p>
+          <p className="text-sm text-brand-100">
+            Real-time clinical synthesis generated by Groq (llama-3.3-70b-versatile).
+          </p>
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0 text-white" />
+      </Link>
+
       {/* Assistant nudge */}
       <Link
         href="/dashboard/assistant"
@@ -332,6 +385,7 @@ export default function DashboardPage() {
       </Link>
 
       <MedicalDisclaimer />
+
     </div>
   );
 }

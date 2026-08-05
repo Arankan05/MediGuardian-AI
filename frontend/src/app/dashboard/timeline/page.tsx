@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Activity, Pill, FlaskConical, FileText, ChevronDown, CheckCircle2, AlertTriangle, Info, ArrowUpCircle, Loader2 } from "lucide-react";
+import { fetchTimeline, resolveActivePatient } from "@/lib/api";
 
 type TimelineEvent = {
   patient_name: string;
@@ -27,32 +28,28 @@ const statusConfig = {
 
 export default function TimelinePage() {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [patientName, setPatientName] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-
   useEffect(() => {
-    fetch(`${API_URL}/timeline`)
-      .then(async res => {
-        if (!res.ok) {
-           const errData = await res.json().catch(() => ({}));
-           throw new Error(errData.detail || "Failed to fetch timeline");
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (Array.isArray(data)) {
-          setEvents(data);
-        }
-      })
-      .catch(err => {
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const active = await resolveActivePatient();
+        setPatientName(active);
+        const data = await fetchTimeline(active);
+        setEvents(data || []);
+      } catch (err: any) {
         console.error("Failed to fetch timeline", err);
-        setError(err.message);
-      })
-      .finally(() => setLoading(false));
-  }, [API_URL]);
+        setError(err.message || "Failed to load timeline.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   if (loading) {
     return (
@@ -80,7 +77,9 @@ export default function TimelinePage() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-10">
-        <h1 className="text-3xl font-bold text-slate-800">Unified Patient Timeline</h1>
+        <h1 className="text-3xl font-bold text-slate-800">
+          {patientName ? `Timeline for ${patientName}` : "Unified Patient Timeline"}
+        </h1>
         <p className="text-slate-500 mt-2">Chronological view of all medical history and interactions.</p>
       </div>
 
@@ -100,11 +99,11 @@ export default function TimelinePage() {
               <div key={idx} className="relative pl-8">
                 {/* Timeline Dot */}
                 <div className="absolute -left-[11px] top-6 w-5 h-5 rounded-full bg-white border-4 border-slate-200 flex items-center justify-center">
-                  <div className={`w-2.5 h-2.5 rounded-full ${config.bg.replace('bg-', 'bg-').replace('50', '500')}`} />
+                  <div className={`w-2.5 h-2.5 rounded-full ${config.bg.replace("bg-", "bg-").replace("50", "500")}`} />
                 </div>
 
                 {/* Card */}
-                <div 
+                <div
                   className={`bg-white/60 backdrop-blur-md border-l-4 ${config.color} border-y border-r border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden cursor-pointer`}
                   onClick={() => setExpandedId(isExpanded ? null : `${idx}`)}
                 >
@@ -114,14 +113,14 @@ export default function TimelinePage() {
                       <div className="flex items-center gap-3 mb-1">
                         <Calendar className="w-4 h-4 text-slate-400" />
                         <span className="font-semibold text-slate-700">{event.visit_date}</span>
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1 ${config.bg} ${config.color.replace('border-', 'text-')}`}>
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1 ${config.bg} ${config.color.replace("border-", "text-")}`}>
                           {config.icon} {config.label}
                         </span>
                       </div>
                       <h3 className="text-lg font-bold text-slate-800">{event.hospital}</h3>
                       <p className="text-sm text-slate-500">Attending: {event.doctor} • Patient: {event.patient_name}</p>
                     </div>
-                    
+
                     <motion.div
                       animate={{ rotate: isExpanded ? 180 : 0 }}
                       className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center self-start md:self-center"
@@ -140,7 +139,6 @@ export default function TimelinePage() {
                         className="border-t border-slate-100 bg-slate-50/50"
                       >
                         <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
-                          
                           {/* Diagnosis & Notes */}
                           <div className="space-y-4">
                             {event.diagnosis && event.diagnosis.length > 0 && (
@@ -150,7 +148,9 @@ export default function TimelinePage() {
                                 </h4>
                                 <div className="flex flex-wrap gap-2">
                                   {event.diagnosis.map((d, i) => (
-                                    <span key={i} className="bg-brand-100 text-brand-700 text-xs px-2 py-1 rounded-md">{d}</span>
+                                    <span key={i} className="bg-brand-100 text-brand-700 text-xs px-2 py-1 rounded-md">
+                                      {d}
+                                    </span>
                                   ))}
                                 </div>
                               </div>
@@ -159,7 +159,9 @@ export default function TimelinePage() {
                             {event.notes && (
                               <div>
                                 <h4 className="text-sm font-bold text-slate-700 mb-1">Clinical Notes</h4>
-                                <p className="text-sm text-slate-600 italic bg-white p-3 rounded-lg border border-slate-200">"{event.notes}"</p>
+                                <p className="text-sm text-slate-600 italic bg-white p-3 rounded-lg border border-slate-200">
+                                  "{event.notes}"
+                                </p>
                               </div>
                             )}
                           </div>
@@ -191,24 +193,25 @@ export default function TimelinePage() {
                                   {event.laboratory_results.map((lab, i) => (
                                     <li key={i} className="text-sm bg-white p-2 rounded-lg border border-slate-200 flex justify-between">
                                       <span className="font-medium text-slate-700">{lab.test_name}</span>
-                                      <span className="text-slate-600 font-semibold">{lab.result} {lab.unit}</span>
+                                      <span className="text-slate-600 font-semibold">
+                                        {lab.result} {lab.unit}
+                                      </span>
                                     </li>
                                   ))}
                                 </ul>
                               </div>
                             )}
                           </div>
-
                         </div>
-                        
+
                         {/* Source Documents */}
                         {event.document_ids && event.document_ids.length > 0 && (
                           <div className="px-5 py-3 bg-slate-100 border-t border-slate-200 flex items-center gap-3">
                             <FileText className="w-4 h-4 text-slate-500" />
                             <span className="text-xs text-slate-500 font-medium">Source Documents:</span>
                             <div className="flex gap-2">
-                              {event.document_ids.map(id => (
-                                <span key={id} className="text-xs bg-white border border-slate-300 px-2 py-1 rounded text-slate-600 hover:bg-slate-50 transition-colors">
+                              {event.document_ids.map((id) => (
+                                <span key={id} className="text-xs bg-white border border-slate-300 px-2 py-1 rounded text-slate-600">
                                   DOC-{id}
                                 </span>
                               ))}
