@@ -33,8 +33,15 @@ def get_db():
     db = database.SessionLocal()
     try:
         yield db
+    except database.OperationalError as oe:
+        db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database connection unavailable: {oe}"
+        )
     finally:
         db.close()
+
 
 
 def _records_for(db: Session, patient_name: Optional[str] = None) -> List[models.MedicalRecord]:

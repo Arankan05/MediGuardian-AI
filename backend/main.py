@@ -6,16 +6,26 @@ from api import routes
 import models
 
 
+import logging
+
+logger = logging.getLogger("mediguardian.main")
+logging.basicConfig(level=logging.INFO)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Test database connection on startup
     success, msg = test_db_connection()
     if success:
-        print(f"[STARTUP SUCCESS] {msg}")
-        init_db()
+        logger.info(f"[STARTUP SUCCESS] {msg}")
+        try:
+            init_db()
+        except Exception as e:
+            logger.error(f"[STARTUP DB INIT ERROR] {e}")
     else:
-        print(f"[STARTUP ERROR] {msg}")
+        logger.error(f"[STARTUP ERROR] {msg}")
     yield
+
 
 
 
