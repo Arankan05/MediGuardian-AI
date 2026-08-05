@@ -1,0 +1,13 @@
+# MediGuardian AI — backend dependencies
+# Minimum versions (not exact pins) so pip installs prebuilt wheels
+# for whichever Python version you have, instead of compiling from source.
+fastapi>=0.115
+uvicorn[standard]>=0.32
+sqlalchemy>=2.0.36
+pydantic>=2.9
+python-dotenv>=1.0
+python-multipart>=0.0.20
+groq>=0.13
+PyMuPDF>=1.24
+pytesseract>=0.3.13
+Pillow>=11

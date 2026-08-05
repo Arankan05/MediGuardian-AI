@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------
+   MediGuardian AI — brand tokens (Tailwind v4 @theme)
+   Indigo / violet "guardian" identity.
+   --------------------------------------------------------------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-brand-50:  #eef0fb;
+  --color-brand-100: #e0e2f8;
+  --color-brand-200: #c7c9f3;
+  --color-brand-300: #a5a8ea;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #372f7a;
+  --color-brand-900: #1e1b4b;
+  --color-brand-950: #14113a;
+
+  --color-accent-300: #c4b5fd;
+  --color-accent-400: #a78bfa;
+  --color-accent-500: #8b5cf6;
+
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+}
+
+:root {
+  --background: #f6f6fd;
+  --foreground: #1b1740;
+}
+
+.dark {
+  --background: #0f172a;
+  --foreground: #f8fafc;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Slim, on-brand scrollbars */
+.scroll-slim::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: rgba(79, 70, 229, 0.28);
+  border-radius: 999px;
+}
+.scroll-slim::-webkit-scrollbar-track { background: transparent; }
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+  border-radius: 4px;
+}

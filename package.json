@@ -1,0 +1,13 @@
+{
+  "name": "mediguardian-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-Powered Medical Report & Prescription Cross-Checker — YGC AI Buildathon 2026",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix frontend run start",
+    "install:frontend": "npm --prefix frontend install",
+    "backend": "cd backend && uvicorn main:app --reload"
+  }
+}
